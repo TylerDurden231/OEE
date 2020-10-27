@@ -24,13 +24,14 @@ import urllib3
 import json
 from xml.etree import ElementTree
 import xmltodict
+import sqlite3
 
 ##
 #Number of expected tests in one hour for each model of STBs
-STB_Expec_Perf = {"Test": 1, "Pace DCR7151":4, "Pace DCR8151":4, "Pace DSR7151":4, "Pace DSR8151":4, "Thomson DCI7211":4, "Intek S61NV":4, "Pace ZD4500ZNO":4, "Intek DTA":4, "KAON":4, "Arris ZC4430KNO":5}
+STB_Expec_Perf = {"Test": 1, "Pace DCR7151":2.6, "Pace DCR8151":2.4, "Pace DSR7151":3, "Pace DSR8151":1.7, "Thomson DCI7211":2.8, "Intek S61NV":2.8, "Pace ZD4500ZNO":3.3, "Intek DTA":3.6, "KAON":3.2, "Arris ZC4430KNO":3.4}
 ##
 #Number of expected tests in one hour for each model of HGWs
-HGW_Expec_Perf = {"HITRON HUB 1.0":12, "HITRON HUB 3.0 v3":12, "HITRON HUB FTTH 2.0":12, "HITRON HUB FTTH":12, "THOMSON EMTA 2.0":12, "HITRON HUB 3.0 v2":12, "HITRON HUB 3.0 v2 ESD":12, "HITRON HUB 3.0":12, "HITRON HUB 3.0 v1 ESD":12, "HITRON HUB 3.0 v1": 12, "HUB 4.0": 12, "GS WIFI": 12, "ARRIS HUB 4.0": 12}
+HGW_Expec_Perf = {"HITRON HUB 1.0":9.8, "HITRON HUB 3.0 v3":7.5, "HITRON HUB FTTH 2.0":7.2, "HITRON HUB FTTH":7.7, "THOMSON EMTA 2.0":8.3, "HITRON HUB 3.0 v2":7.6, "HITRON HUB 3.0 v2 ESD":7.6, "HITRON HUB 3.0":7.5, "HITRON HUB 3.0 v1 ESD":9.8, "HITRON HUB 3.0 v1": 9.8, "HUB 4.0": 8.1, "GS WIFI": 1, "ARRIS HUB 4.0": 8.1}
 ##
 #All working hours
 hours = ['16h', '17h', '18h', '19h', '20h', '21h', '22h', '23h', '00h', '7h', '8h', '9h', '10h', '11h', '12h', '13h', '14h', '15h']
@@ -213,6 +214,109 @@ class Connect_to_db:
             return 2
         except:
             return -1
+
+class Connect_lite_db:
+    """!Class that allows comunicate with Database
+    Class with several functions to establish communication with database and send querys and receive the respective answers
+    """
+    #connects the object self to the variables passed in its incialization. 
+    ## JL- Connects to DB.
+    def connect(self, sql_database):
+        """!Connects to Database
+        Use parameters passed when was created Connect_to_db object to establish connection to database
+        @returns self.mydb database connection
+        """
+        try:
+            self.litecon = sqlite3.connect(sql_database)
+
+            return self.litecon
+        except Exception as error:
+            print(error)
+
+    def create_table(self, sql_table, columns):
+        table_columns = ""
+        sep = ", "
+        i = 0
+        for x in columns:
+            if i == len(columns)-1:
+                sep = ""
+            if columns[x][2] == "yes":
+                if len(columns[x]) > 3:
+                    table_columns += columns[x][0] + " " + columns[x][1] + " PRIMARY KEY " + columns[x][3] + sep
+                else:
+                    table_columns += columns[x][0] + " " + columns[x][1] + " PRIMARY KEY" + sep
+            else:
+                if len(columns[x]) > 3:
+                    table_columns += columns[x][0] + " " + columns[x][1] + " " + columns[x][3] + sep
+                else:
+                    table_columns += columns[x][0] + " " + columns[x][1] + sep
+
+            i += 1
+        sql = 'CREATE TABLE IF NOT EXISTS {} ({});'.format(sql_table, table_columns)
+        print(sql)
+        try:
+            mycursor = self.litecon.cursor()
+            mycursor.execute(sql)
+        except Exception as error:
+            print(error)
+            
+    def insert_info(self, sql_table, column, values):
+        for i, x in enumerate(column):
+            if i == 0:
+                columns = x
+                values = values[i]
+            else:
+                columns += "," + x
+                values += "," + values[i]
+        sql = 'INSERT INTO {} ({}) VALUES ("{}");'.format(sql_table, columns, values)
+        print(sql)
+        try:
+            mycursor = self.litecon.cursor()
+            mycursor.execute(sql)
+            self.litecon.commit()
+        except Exception as error:
+            print(error)
+
+    def update_info(self, sql_table, column, value, row, row_value):
+        if value == "NULL":
+            sql = 'UPDATE {} SET {} = {} WHERE {} = "{}";'.format(sql_table, column, value, row, row_value)
+        else:
+            sql = 'UPDATE {} SET {} = "{}" WHERE {} = "{}";'.format(sql_table, column, value, row, row_value)
+
+        print(sql)
+        try:
+            mycursor = self.litecon.cursor()
+            mycursor.execute(sql)
+            self.litecon.commit()
+        except Exception as error:
+            print(error)
+
+    def get_slot_info(self, sql_table, slot):
+        sql = 'SELECT * FROM {} WHERE Slot = "{}";'.format(sql_table, slot)
+        try:
+            mycursor = self.litecon.cursor()
+            mycursor.execute(sql)
+            self.litecon.commit()
+            result = mycursor.fetchall()
+        except Exception as error:
+            print(error)
+
+    def get_date_not_null(self, sql_table):
+        sql = 'SELECT * FROM {} WHERE Start_Date is not NULL;'.format(sql_table)
+        try:
+            mycursor = self.litecon.cursor()
+            mycursor.execute(sql)
+            self.litecon.commit()
+            result = mycursor.fetchall()
+            return result
+        except Exception as error:
+            print(error)
+
+    def close(self):
+        try:
+            self.litecon.close()
+        except Exception as error:
+            print(error)
 
 def create_dictonary(plataform):
     """!Creates a dictonary
@@ -543,7 +647,7 @@ def fullfill_dict_for_csv(platform, result_dict, results_temp):
 
     return result_dict    
 
-def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
+def fullfill_dict(platform, result_dict, dict_to_csv, results_temp, unvai_slots, current_day, yesterday):
     """!Fulfill Dictonary 
     Fulfill dictonary with all values of Availability, Performance, Quality and OEE for each hour in each slot.
     The values used to calculate the desire values to put on this dictonary are on results_temp argument
@@ -555,7 +659,7 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
     @returns result_dict Returns a created dictonary
     """ 
     platform = platform.lower()    
-    disponibility_slot_h = 60 
+    #disponibility_slot_h = 60 
     disponibility_slot_h_prev = 60
     
     platform = platform.lower()
@@ -572,7 +676,7 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                 new_list[0] = datetime.strptime(new_list[0], '%Y-%m-%d %H:%M:%S')
                 new_list[1] = datetime.strptime(new_list[1], '%Y-%m-%d %H:%M:%S')
                 stopped_list.append(new_list)
-            print(stopped_list)
+            #print(stopped_list)
             for hora in range(18):
                 results = []
                 qual_temp = 0
@@ -580,20 +684,8 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                     slot_number = pos.replace("Slot_","")
                     if results_temp[i][0] == slot_number and results_temp[i][2].hour == hour:
                         for j, k in enumerate(stopped_list):
-                            if results_temp[i][2].hour >= stopped_list[j][0].hour and results_temp[i][2].hour <= stopped_list[j][1].hour:
-                                if results_temp[i][2].hour == stopped_list[j][0].hour and results_temp[i][2].hour != stopped_list[j][1].hour:
-                                    if results_temp[i][2].minute > stopped_list[j][0].minute:
-                                        ignore_test = True
-                                elif results_temp[i][2].hour == stopped_list[j][0].hour and results_temp[i][2].hour == stopped_list[j][1].hour:
-                                    if results_temp[i][2].minute > stopped_list[j][0].minute and results_temp[i][2].minute <= stopped_list[j][1].minute:
-                                        ignore_test = True
-                                elif results_temp[i][2].hour != stopped_list[j][0].hour and results_temp[i][2].hour == stopped_list[j][1].hour:
-                                    if results_temp[i][2].minute <= stopped_list[j][1].minute:
-                                        ignore_test = True
-                                elif results_temp[i][2].hour != stopped_list[j][0].hour and results_temp[i][2].hour != stopped_list[j][1].hour:
-                                    ignore_test = True
-                                else:
-                                    print("!!!!!!!!!!!!!!Error 1!!!!!!!!!!!!!!!!!")
+                            if results_temp[i][2] >= stopped_list[j][0] and results_temp[i][2] <= stopped_list[j][1] + timedelta(0,0,0,0,1):
+                                ignore_test = True
                         if ignore_test == False:
                             list_temp = list(results_temp[i])
                             del list_temp[0]
@@ -603,12 +695,19 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                             ignore_test = False
                 stop_time = 0
                 stopped_times = {}
+                if hour >= 16:
+                    hour_date = datetime.strptime(yesterday + " " + str(hour) + ":00:00", '%Y-%m-%d %H:%M:%S')
+                else:
+                    hour_date = datetime.strptime(current_day + " " + str(hour) + ":00:00", '%Y-%m-%d %H:%M:%S')
                 for j, k in enumerate(stopped_list):
-                    if hour >= stopped_list[j][0].hour and hour <= stopped_list[j][1].hour:
+                    if (hour_date >= stopped_list[j][0] and hour_date <= stopped_list[j][1]) or (hour >= stopped_list[j][0].hour and hour <= stopped_list[j][1].hour):
                         if hour == stopped_list[j][0].hour and hour == stopped_list[j][1].hour:
-                            stop_time += stopped_list[j][1].minute - stopped_list[j][0].minute
-                            stopped_times["start_" + str(j)] = stopped_list[j][0].minute
-                            stopped_times["stop_" + str(j)] = stopped_list[j][1].minute
+                            if stopped_list[j][0].minute == 0 and stopped_list[j][1].minute == 0:
+                                stop_time += 60
+                            else:
+                                stop_time += stopped_list[j][1].minute - stopped_list[j][0].minute
+                                stopped_times["start_" + str(j)] = stopped_list[j][0].minute
+                                stopped_times["stop_" + str(j)] = stopped_list[j][1].minute
                         elif hour == stopped_list[j][0].hour and hour != stopped_list[j][1].hour:
                             stop_time += 60 - stopped_list[j][0].minute
                             stopped_times["start_" + str(j)] = stopped_list[j][0].minute
@@ -619,14 +718,16 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                             stop_time += 60
                         else:
                             print("!!!!!!!!!!!!!!Error 2!!!!!!!!!!!!!!!!!")
-                print(stopped_times)
+
+                #print(stopped_times)
                 dispo_fin = round((60 - stop_time)/disponibility_slot_h_prev,4)
 
-                print(pos + "_Hour_" + str(hour) + "--" + str(results))
+                #print(pos + "_Hour_" + str(hour) + "--" + str(results))
                 if len(results) == 0:
                     pref = 0
                     qual = 0
                     oee = 0
+                    expect = 0
                 else:
                     model_tested = {}
                     expect = 0                       
@@ -657,199 +758,6 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                                     elif list(stopped_times.keys())[len(stopped_times)-1].startswith("stop"):
                                         if results[i-1][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]:
                                             model_tested[results[i][0]] += 60 - results[i-1][1].minute
-                                        elif results[i][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]:
-                                            model_tested[results[i][0]] += 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]
-                                        else:
-                                            model_tested[results[i][0]] += 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] - results[i-1][1].minute
-                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("start"):
-                                        if len(stopped_times) > 1:
-                                            if results[i-1][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-2]]:
-                                                model_tested[results[i][0]] += stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
-                                            else:
-                                                model_tested[results[i][0]] += stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-3]] - results[i-1][1].minute
-                                        else:
-                                            model_tested[results[i][0]] += stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
-                                    else:
-                                        else:
-                                            print("!!!!!!!!!!!!!!Error 4!!!!!!!!!!!!!!!!!")
-                                else:
-                                    if len(stopped_times) == 0:
-                                        model_tested[results[i][0]] += results[i][1].minute - results[i-1][1].minute
-                                    else:
-                                        middle_stop = False
-                                        for x, y in stopped_times.items():
-                                            if middle_stop:
-                                                mstop = stopped_times[x]
-                                                break
-                                            if stopped_times[x] < results[i][1].minute and stopped_times[x] > results[i-1][1].minute:
-                                                middle_stop = True
-                                                mstart = stopped_times[x]
-                                                continue
-                                        if middle_stop:
-                                            model_tested[results[i][0]] += results[i][1].minute - mstop + mstart - results[i-1][1].minute
-                                        else:
-                                            model_tested[results[i][0]] += results[i][1].minute - results[i-1][1].minute
-
-                            else:
-                                if i == len(results)-1:
-                                    if len(stopped_times) == 0:
-                                        model_tested[results[i][0]] = 60 - results[i-1][1].minute
-                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("stop"):
-                                        if results[i-1][1].minute > list(stopped_times.keys())[len(stopped_times)-1]:
-                                            model_tested[results[i][0]] = 60 - results[i-1][1].minute
-                                        elif results[i][1].minute > list(stopped_times.keys())[len(stopped_times)-1]:
-                                            model_tested[results[i][0]] = 60 - list(stopped_times.keys())[len(stopped_times)-1]
-                                        else:
-                                            model_tested[results[i][0]] = 60 - list(stopped_times.keys())[len(stopped_times)-1] + list(stopped_times.keys())[len(stopped_times)-2] - results[i-1][1].minute
-                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("start"):
-                                        if len(stopped_times) > 1:
-                                            if results[i-1][1].minute > list(stopped_times.keys())[len(stopped_times)-2]:
-                                                model_tested[results[i][0]] = list(stopped_times.keys())[len(stopped_times)-1] - results[i-1][1].minute
-                                            else:
-                                                model_tested[results[i][0]] = list(stopped_times.keys())[len(stopped_times)-1] - list(stopped_times.keys())[len(stopped_times)-2] + list(stopped_times.keys())[len(stopped_times)-3] - results[i-1][1].minute
-                                        else:
-                                            model_tested[results[i][0]] = list(stopped_times.keys())[len(stopped_times)-1] - results[i-1][1].minute
-                                    else:
-                                    print("!!!!!!!!!!!!!!Error 5!!!!!!!!!!!!!!!!!")
-                                else:
-                                    if len(stopped_times) == 0:
-                                        model_tested[results[i][0]] = results[i][1].minute - results[i-1][1].minute   
-                                    else:
-                                        middle_stop = False
-                                        for x, y in stopped_times.items():
-                                            if middle_stop:
-                                                mstop = stopped_times[x]
-                                                break
-                                            if stopped_times[x] < results[i][1].minute and stopped_times[x] > results[i-1][1].minute:
-                                                middle_stop = True
-                                                mstart = stopped_times[x]
-                                                continue
-                                        if middle_stop:
-                                            model_tested[results[i][0]] = results[i][1].minute - mstop + mstart - results[i-1][1].minute
-                                        else:
-                                            model_tested[results[i][0]] = results[i][1].minute - results[i-1][1].minute
-
-                        #print(model_tested)
-                    for key in model_tested:
-                        expect += (model_tested[key]*STB_Expec_Perf[key])/(60)
-                    
-                    pref = round(len(results)/expect,4)
-                    qual = round(qual_temp/len(results),4)
-                    oee =  round((dispo_fin*pref*qual),4)
-                #print("Availability: " + str(dispo_fin) + " Preformance: " + str(pref) + " Quality: " + str(qual) + " OEE: " + str(oee))
-
-                result_dict[pos][str(hour) + "h"]["Disp"] = round(dispo_fin*100,4)
-                result_dict[pos][str(hour) + "h"]["Perf"] = round(pref*100,4)
-                result_dict[pos][str(hour) + "h"]["Qual"] = round(qual*100,4)
-                result_dict[pos][str(hour) + "h"]["OEE"] = round(oee*100,4)
-                
-                hour += 1
-                if hour == 24:
-                    hour = 0
-                elif hour == 1:
-                    hour = 7
-           
-            slot += 1
-            if str(slot)[1] == "9":
-                slot = int(slot) + 2
-    
-    elif platform == 'hgw':
-        slot = 1
-        for pos in result_dict:
-            hour = 7
-            stopped_list = []
-            for i, v in enumerate(unvai_slots[pos]):      
-                new_list = unvai_slots[pos][i].split('_')
-                new_list[0] = datetime.strptime(new_list[0], '%Y-%m-%d %H:%M:%S')
-                new_list[1] = datetime.strptime(new_list[1], '%Y-%m-%d %H:%M:%S')
-                stopped_list.append(new_list)
-            for hora in range(18):
-                results = []
-                qual_temp = 0
-                for i in range(len(results_temp)):
-                    slot_number = pos.replace("Slot_","")
-                    if len(slot_number) == 1:
-                        slot_number = "0" + slot_number
-                    if results_temp[i][0] == slot_number and results_temp[i][2].hour == hour:
-                        for j, k in enumerate(stopped_list):
-                            if results_temp[i][2].hour >= stopped_list[j][0].hour and results_temp[i][2].hour <= stopped_list[j][1].hour:
-                                if results_temp[i][2].hour == stopped_list[j][0].hour and results_temp[i][2].hour != stopped_list[j][1].hour:
-                                    if results_temp[i][2].minute > stopped_list[j][0].minute:
-                                        ignore_test = True
-                                elif results_temp[i][2].hour == stopped_list[j][0].hour and results_temp[i][2].hour == stopped_list[j][1].hour:
-                                    if results_temp[i][2].minute > stopped_list[j][0].minute and results_temp[i][2].minute <= stopped_list[j][1].minute:
-                                        ignore_test = True
-                                elif results_temp[i][2].hour != stopped_list[j][0].hour and results_temp[i][2].hour == stopped_list[j][1].hour:
-                                    if results_temp[i][2].minute <= stopped_list[j][1].minute:
-                                        ignore_test = True
-                                elif results_temp[i][2].hour != stopped_list[j][0].hour and results_temp[i][2].hour != stopped_list[j][1].hour:
-                                    ignore_test = True
-                                else:
-                                    print("!!!!!!!!!!!!!!Error 1!!!!!!!!!!!!!!!!!")
-                        if ignore_test == False:
-                            list_temp = list(results_temp[i])
-                            del list_temp[0]
-                            test_tuple = tuple(list_temp)
-                            results.append(test_tuple)
-                        else:
-                            ignore_test = False
-                stop_time = 0
-                stopped_times = {}
-                for j, k in enumerate(stopped_list):
-                    if hour >= stopped_list[j][0].hour and hour <= stopped_list[j][1].hour:
-                        if hour == stopped_list[j][0].hour and hour == stopped_list[j][1].hour:
-                            stop_time += stopped_list[j][1].minute - stopped_list[j][0].minute
-                            stopped_times["start_" + str(j)] = stopped_list[j][0].minute
-                            stopped_times["stop_" + str(j)] = stopped_list[j][1].minute
-                        elif hour == stopped_list[j][0].hour and hour != stopped_list[j][1].hour:
-                            stop_time += 60 - stopped_list[j][0].minute
-                            stopped_times["start_" + str(j)] = stopped_list[j][0].minute
-                        elif hour != stopped_list[j][0].hour and hour == stopped_list[j][1].hour:
-                            stop_time += stopped_list[j][1].minute
-                            stopped_times["stop_" + str(j)] = stopped_list[j][1].minute
-                        elif hour != stopped_list[j][0].hour and hour != stopped_list[j][1].hour:
-                            stop_time += 60
-                        else:
-                            print("!!!!!!!!!!!!!!Error 2!!!!!!!!!!!!!!!!!")
-
-                dispo_fin = round((60 - stop_time)/disponibility_slot_h_prev,4)
-
-                if len(results) == 0:
-                    pref = 0
-                    qual = 0
-                    oee = 0
-                else:
-                    model_tested = {}
-                    expect = 0                       
-                    for i in range(len(results)):
-                        if i == 0:
-                            if results[i][2] == 'OK':
-                                qual_temp = 1
-                            if i == len(results)-1:
-                                model_tested[results[i][0]] = 60 - stop_time
-                            else:
-                                if len(stopped_times) == 0:
-                                    model_tested[results[i][0]] = results[i][1].minute
-                                elif list(stopped_times.keys())[0].startswith("stop"):
-                                    model_tested[results[i][0]] = results[i][1].minute - stopped_times[list(stopped_times.keys())[0]]
-                                elif results[i][1].minute < stopped_times[list(stopped_times.keys())[0]]:
-                                    model_tested[results[i][0]] = results[i][1].minute
-                                elif results[i][1].minute > stopped_times[list(stopped_times.keys())[0]]:
-                                    model_tested[results[i][0]] = results[i][1].minute - stopped_times[list(stopped_times.keys())[1]] + stopped_times[list(stopped_times.keys())[0]]    
-                                else:
-                                    print("!!!!!!!!!!!!!!Error 3!!!!!!!!!!!!!!!!!")
-                        else:
-                            if results[i][2] == 'OK':
-                                qual_temp += 1
-                            if results[i][0] in model_tested.keys():
-                                if i == len(results)-1:
-                                    if len(stopped_times) == 0:
-                                        model_tested[results[i][0]] += 60 - results[i-1][1].minute
-                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("stop"):
-                                        if results[i-1][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]:
-                                            model_tested[results[i][0]] += 60 - results[i-1][1].minute
-                                        elif results[i][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]:
-                                            model_tested[results[i][0]] += 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]
                                         else:
                                             model_tested[results[i][0]] += 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] - results[i-1][1].minute
                                     elif list(stopped_times.keys())[len(stopped_times)-1].startswith("start"):
@@ -887,18 +795,206 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                                     elif list(stopped_times.keys())[len(stopped_times)-1].startswith("stop"):
                                         if results[i-1][1].minute > list(stopped_times.keys())[len(stopped_times)-1]:
                                             model_tested[results[i][0]] = 60 - results[i-1][1].minute
-                                        elif results[i][1].minute > list(stopped_times.keys())[len(stopped_times)-1]:
-                                            model_tested[results[i][0]] = 60 - list(stopped_times.keys())[len(stopped_times)-1]
                                         else:
-                                            model_tested[results[i][0]] = 60 - list(stopped_times.keys())[len(stopped_times)-1] + list(stopped_times.keys())[len(stopped_times)-2] - results[i-1][1].minute
+                                            model_tested[results[i][0]] = 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] - results[i-1][1].minute
                                     elif list(stopped_times.keys())[len(stopped_times)-1].startswith("start"):
                                         if len(stopped_times) > 1:
                                             if results[i-1][1].minute > list(stopped_times.keys())[len(stopped_times)-2]:
-                                                model_tested[results[i][0]] = list(stopped_times.keys())[len(stopped_times)-1] - results[i-1][1].minute
+                                                model_tested[results[i][0]] = stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
                                             else:
-                                                model_tested[results[i][0]] = list(stopped_times.keys())[len(stopped_times)-1] - list(stopped_times.keys())[len(stopped_times)-2] + list(stopped_times.keys())[len(stopped_times)-3] - results[i-1][1].minute
+                                                model_tested[results[i][0]] = stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-3]] - results[i-1][1].minute
                                         else:
-                                            model_tested[results[i][0]] = list(stopped_times.keys())[len(stopped_times)-1] - results[i-1][1].minute
+                                            model_tested[results[i][0]] = stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
+                                    else:
+                                        print("!!!!!!!!!!!!!!Error 5!!!!!!!!!!!!!!!!!")
+                                else:
+                                    if len(stopped_times) == 0:
+                                        model_tested[results[i][0]] = results[i][1].minute - results[i-1][1].minute   
+                                    else:
+                                        middle_stop = False
+                                        for x, y in stopped_times.items():
+                                            if middle_stop:
+                                                mstop = stopped_times[x]
+                                                break
+                                            if stopped_times[x] < results[i][1].minute and stopped_times[x] > results[i-1][1].minute:
+                                                middle_stop = True
+                                                mstart = stopped_times[x]
+                                                continue
+                                        if middle_stop:
+                                            model_tested[results[i][0]] = results[i][1].minute - mstop + mstart - results[i-1][1].minute
+                                        else:
+                                            model_tested[results[i][0]] = results[i][1].minute - results[i-1][1].minute
+
+                        #print(model_tested)
+                    for key in model_tested:
+                        expect += (model_tested[key]*STB_Expec_Perf[key])/(60)
+                    
+                    pref = round(len(results)/expect,4)
+                    qual = round(qual_temp/len(results),4)
+                    oee =  round((dispo_fin*pref*qual),4)
+                #print("Availability: " + str(dispo_fin) + " Preformance: " + str(pref) + " Quality: " + str(qual) + " OEE: " + str(oee))
+
+                result_dict[pos][str(hour) + "h"]["Disp"] = round(dispo_fin*100,4)
+                result_dict[pos][str(hour) + "h"]["Perf"] = round(pref*100,4)
+                result_dict[pos][str(hour) + "h"]["Qual"] = round(qual*100,4)
+                result_dict[pos][str(hour) + "h"]["OEE"] = round(oee*100,4)
+
+                dict_to_csv[pos][str(hour) + "h"]["N_Testes"] = int(len(results))
+                dict_to_csv[pos][str(hour) + "h"]["OKs"] = int(qual_temp)
+                dict_to_csv[pos][str(hour) + "h"]["N_Testes_Expextaveis"] = expect
+                dict_to_csv[pos][str(hour) + "h"]["Disp"] = round(dispo_fin*100,4)
+                dict_to_csv[pos][str(hour) + "h"]["Perf"] = round(pref*100,4)
+                dict_to_csv[pos][str(hour) + "h"]["Qual"] = round(qual*100,4)
+                dict_to_csv[pos][str(hour) + "h"]["OEE"] = round(oee*100,4)
+                
+                hour += 1
+                if hour == 24:
+                    hour = 0
+                elif hour == 1:
+                    hour = 7
+           
+            slot += 1
+            if str(slot)[1] == "9":
+                slot = int(slot) + 2
+    
+    elif platform == 'hgw':
+        slot = 1
+        for pos in result_dict:
+            hour = 7
+            stopped_list = []
+            for i, v in enumerate(unvai_slots[pos]):      
+                new_list = unvai_slots[pos][i].split('_')
+                new_list[0] = datetime.strptime(new_list[0], '%Y-%m-%d %H:%M:%S')
+                new_list[1] = datetime.strptime(new_list[1], '%Y-%m-%d %H:%M:%S')
+                stopped_list.append(new_list)
+            for hora in range(18):
+                results = []
+                qual_temp = 0
+                for i in range(len(results_temp)):
+                    slot_number = pos.replace("Slot_","")
+                    if len(slot_number) == 1:
+                        slot_number = "0" + slot_number
+                    if results_temp[i][0] == slot_number and results_temp[i][2].hour == hour:
+                        for j, k in enumerate(stopped_list):
+                            if results_temp[i][2] >= stopped_list[j][0] and results_temp[i][2] <= stopped_list[j][1] + timedelta(0,0,0,0,1):
+                                ignore_test = True
+                        if ignore_test == False:
+                            list_temp = list(results_temp[i])
+                            del list_temp[0]
+                            test_tuple = tuple(list_temp)
+                            results.append(test_tuple)
+                        else:
+                            ignore_test = False
+                stop_time = 0
+                stopped_times = {}
+                if hour >= 16:
+                    hour_date = datetime.strptime(yesterday + " " + str(hour) + ":00:00", '%Y-%m-%d %H:%M:%S')
+                else:
+                    hour_date = datetime.strptime(current_day + " " + str(hour) + ":00:00", '%Y-%m-%d %H:%M:%S')
+                for j, k in enumerate(stopped_list):
+                    if (hour_date >= stopped_list[j][0] and hour_date <= stopped_list[j][1]) or (hour >= stopped_list[j][0].hour and hour <= stopped_list[j][1].hour):
+                        if hour == stopped_list[j][0].hour and hour == stopped_list[j][1].hour:
+                            if stopped_list[j][0].minute == 0 and stopped_list[j][1].minute == 0:
+                                stop_time += 60
+                            else:
+                                stop_time += stopped_list[j][1].minute - stopped_list[j][0].minute
+                                stopped_times["start_" + str(j)] = stopped_list[j][0].minute
+                                stopped_times["stop_" + str(j)] = stopped_list[j][1].minute
+                        elif hour == stopped_list[j][0].hour and hour != stopped_list[j][1].hour:
+                            stop_time += 60 - stopped_list[j][0].minute
+                            stopped_times["start_" + str(j)] = stopped_list[j][0].minute
+                        elif hour != stopped_list[j][0].hour and hour == stopped_list[j][1].hour:
+                            stop_time += stopped_list[j][1].minute
+                            stopped_times["stop_" + str(j)] = stopped_list[j][1].minute
+                        elif hour != stopped_list[j][0].hour and hour != stopped_list[j][1].hour:
+                            stop_time += 60
+                        else:
+                            print("!!!!!!!!!!!!!!Error 2!!!!!!!!!!!!!!!!!")
+
+                dispo_fin = round((60 - stop_time)/disponibility_slot_h_prev,4)
+
+                if len(results) == 0:
+                    pref = 0
+                    qual = 0
+                    oee = 0
+                    expect = 0 
+                else:
+                    model_tested = {}
+                    expect = 0                       
+                    for i in range(len(results)):
+                        if i == 0:
+                            if results[i][2] == 'OK':
+                                qual_temp = 1
+                            if i == len(results)-1:
+                                model_tested[results[i][0]] = 60 - stop_time
+                            else:
+                                if len(stopped_times) == 0:
+                                    model_tested[results[i][0]] = results[i][1].minute
+                                elif list(stopped_times.keys())[0].startswith("stop"):
+                                    model_tested[results[i][0]] = results[i][1].minute - stopped_times[list(stopped_times.keys())[0]]
+                                elif results[i][1].minute < stopped_times[list(stopped_times.keys())[0]]:
+                                    model_tested[results[i][0]] = results[i][1].minute
+                                elif results[i][1].minute > stopped_times[list(stopped_times.keys())[0]]:
+                                    model_tested[results[i][0]] = results[i][1].minute - stopped_times[list(stopped_times.keys())[1]] + stopped_times[list(stopped_times.keys())[0]]    
+                                else:
+                                    print("!!!!!!!!!!!!!!Error 3!!!!!!!!!!!!!!!!!")
+                        else:
+                            if results[i][2] == 'OK':
+                                qual_temp += 1
+                            if results[i][0] in model_tested.keys():
+                                if i == len(results)-1:
+                                    if len(stopped_times) == 0:
+                                        model_tested[results[i][0]] += 60 - results[i-1][1].minute
+                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("stop"):
+                                        if results[i-1][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-1]]:
+                                            model_tested[results[i][0]] += 60 - results[i-1][1].minute
+                                        else:
+                                            model_tested[results[i][0]] += 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] - results[i-1][1].minute
+                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("start"):
+                                        if len(stopped_times) > 1:
+                                            if results[i-1][1].minute > stopped_times[list(stopped_times.keys())[len(stopped_times)-2]]:
+                                                model_tested[results[i][0]] += stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
+                                            else:
+                                                model_tested[results[i][0]] += stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-3]] - results[i-1][1].minute
+                                        else:
+                                            model_tested[results[i][0]] += stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
+                                    else:
+                                        print("!!!!!!!!!!!!!!Error 4!!!!!!!!!!!!!!!!!")
+                                else:
+                                    if len(stopped_times) == 0:
+                                        model_tested[results[i][0]] += results[i][1].minute - results[i-1][1].minute
+                                    else:
+                                        middle_stop = False
+                                        for x, y in stopped_times.items():
+                                            if middle_stop:
+                                                mstop = stopped_times[x]
+                                                break
+                                            if stopped_times[x] < results[i][1].minute and stopped_times[x] > results[i-1][1].minute:
+                                                middle_stop = True
+                                                mstart = stopped_times[x]
+                                                continue
+                                        if middle_stop:
+                                            model_tested[results[i][0]] += results[i][1].minute - mstop + mstart - results[i-1][1].minute
+                                        else:
+                                            model_tested[results[i][0]] += results[i][1].minute - results[i-1][1].minute
+
+                            else:
+                                if i == len(results)-1:
+                                    if len(stopped_times) == 0:
+                                        model_tested[results[i][0]] = 60 - results[i-1][1].minute
+                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("stop"):
+                                        if results[i-1][1].minute > list(stopped_times.keys())[len(stopped_times)-1]:
+                                            model_tested[results[i][0]] = 60 - results[i-1][1].minute
+                                        else:
+                                            model_tested[results[i][0]] = 60 - stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] - results[i-1][1].minute
+                                    elif list(stopped_times.keys())[len(stopped_times)-1].startswith("start"):
+                                        if len(stopped_times) > 1:
+                                            if results[i-1][1].minute > list(stopped_times.keys())[len(stopped_times)-2]:
+                                                model_tested[results[i][0]] = stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
+                                            else:
+                                                model_tested[results[i][0]] = stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - stopped_times[list(stopped_times.keys())[len(stopped_times)-2]] + stopped_times[list(stopped_times.keys())[len(stopped_times)-3]] - results[i-1][1].minute
+                                        else:
+                                            model_tested[results[i][0]] = stopped_times[list(stopped_times.keys())[len(stopped_times)-1]] - results[i-1][1].minute
                                     else:
                                         print("!!!!!!!!!!!!!!Error 5!!!!!!!!!!!!!!!!!")
                                 else:
@@ -930,6 +1026,14 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
                 result_dict[pos][str(hour) + "h"]["Perf"] = round(pref*100,4)
                 result_dict[pos][str(hour) + "h"]["Qual"] = round(qual*100,4)
                 result_dict[pos][str(hour) + "h"]["OEE"] = round(oee*100,4)
+
+                dict_to_csv[pos][str(hour) + "h"]["N_Testes"] = int(len(results))
+                dict_to_csv[pos][str(hour) + "h"]["OKs"] = int(qual_temp)
+                dict_to_csv[pos][str(hour) + "h"]["N_Testes_Expextaveis"] = expect
+                dict_to_csv[pos][str(hour) + "h"]["Disp"] = round(dispo_fin*100,4)
+                dict_to_csv[pos][str(hour) + "h"]["Perf"] = round(pref*100,4)
+                dict_to_csv[pos][str(hour) + "h"]["Qual"] = round(qual*100,4)
+                dict_to_csv[pos][str(hour) + "h"]["OEE"] = round(oee*100,4)
                 
                 hour += 1
                 if hour == 24:
@@ -939,11 +1043,11 @@ def fullfill_dict(platform, result_dict, results_temp, unvai_slot):
 
             slot += 1
 
-    return result_dict    
+    return result_dict, dict_to_csv
 
-def fullfill_dict_slot_day(platform, result_dict, results_temp):
+def fullfill_dict_slot_day(platform, result_dict, results_temp, unvai_slots):
     """!Fulfill Dictonary 
-    Fulfill dictonary with all values of Availability, Performance, Quality and OEE for each hour.
+    Fulfill dictonary with all values of Availability, Performance, Quality and OEE for each slot.
     The values used to calculate the desire values to put on this dictonary are on results_temp argument
     This dictonary is used to build graphics of OEE parameters of one day for all slots
     @param platform Platform which dictonary will be create for 
@@ -953,25 +1057,58 @@ def fullfill_dict_slot_day(platform, result_dict, results_temp):
     @returns result_dict Returns a created dictonary
     """
     platform = platform.lower()
-    disponibility_slot_h = 60 
-    disponibility_slot_h_prev = 60
-    dispo_fin = disponibility_slot_h/disponibility_slot_h_prev
+    disponibility_slot_h_prev = 1080
     slot = 11
     corres_hour = {'16h':1, '17h':2, '18h':3, '19h':4, '20h':5, '21h':6, '22h':7, '23h':8, '00h':9, '7h':10, '8h':11, '9h':12, '10h':13, '11h':14, '12h':15, '13h':16, '14h':17, '15h':18}
+    ignore_test = False
     #print(results_temp)
     for pos in result_dict: 
         results = []
         qual_temp = 0
+        stopped_list = []
+        for i, v in enumerate(unvai_slots[pos]):      
+            new_list = unvai_slots[pos][i].split('_')
+            new_list[0] = datetime.strptime(new_list[0], '%Y-%m-%d %H:%M:%S')
+            new_list[1] = datetime.strptime(new_list[1], '%Y-%m-%d %H:%M:%S')
+            stopped_list.append(new_list)
         for i in range(len(results_temp)):
             slot_number = pos.replace("Slot_","")
             if len(slot_number) == 1:
                 slot_number = "0" + slot_number
             if results_temp[i][0] == slot_number and str(results_temp[i][2].hour) + "h" in hours:
-                list_temp = list(results_temp[i])
-                del list_temp[0]
-                test_tuple = tuple(list_temp)
-                results.append(test_tuple)
+                for j, k in enumerate(stopped_list):
+                    if results_temp[i][2] >= stopped_list[j][0] and results_temp[i][2] <= stopped_list[j][1] + timedelta(0,0,0,0,1):
+                        ignore_test = True
+                if ignore_test == False:
+                    list_temp = list(results_temp[i])
+                    del list_temp[0]
+                    test_tuple = tuple(list_temp)
+                    results.append(test_tuple)
+                else:
+                    ignore_test = False
+
+        def sort_dict(id):
+            aux_date = datetime(1970, 1, 1)           
+            return (id[0]-aux_date).total_seconds()
+
+        stopped_list.sort(key=sort_dict)
+
+        #print(stopped_list)
         #print("*****" + pos + "----" + str(results))
+
+        stop_time = 0
+        for j, k in enumerate(stopped_list):
+            if stopped_list[j][0].day != stopped_list[j][1].day:
+                diff_time = stopped_list[j][1] - stopped_list[j][0]
+                stop_time += int(diff_time.total_seconds()/60) - 360
+            else:
+                diff_time = stopped_list[j][1] - stopped_list[j][0]
+                stop_time += int(diff_time.total_seconds()/60)
+        # print(str(pos) + " --- " + str(stop_time))
+        # print(results)
+        dispo_fin = round((1080 - stop_time)/disponibility_slot_h_prev,4)
+        # print(dispo_fin)
+        # input("Fist Stop")
 
         if len(results) == 0:
             pref = 0
@@ -979,29 +1116,80 @@ def fullfill_dict_slot_day(platform, result_dict, results_temp):
             oee = 0
         else:
             model_tested = {}
-            expect = 0                       
-            for i in range(len(results)):
-                if i == 0:
-                    if results[i][2] == 'OK':
-                        qual_temp = 1
-                    if i == len(results)-1:
-                        model_tested[results[i][0]] = 60*len(hours)
-                    else:
-                        model_tested[results[i][0]] = ((corres_hour[str(results[i][1].hour) + "h"] - 1) *60) + results[i][1].minute                            
-                else:
-                    if results[i][2] == 'OK':
-                        qual_temp += 1
-                    if results[i][0] in model_tested.keys():
+            expect = 0 
+            ind = 0 
+            if len(stopped_list) != 0:
+                for i in range(len(results)):
+                    if i == 0:
+                        if results[i][2] == 'OK':
+                            qual_temp = 1
                         if i == len(results)-1:
-                            model_tested[results[i][0]] += (60*len(hours)) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                            model_tested[results[i][0]] = 60*len(hours) - sum([(a[1] - a[0]).total_seconds()/60 for a in stopped_list])
                         else:
-                            model_tested[results[i][0]] += (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                            if results[i][1] < stopped_list[ind][0]:
+                                model_tested[results[i][0]] = (((corres_hour[str(results[i][1].hour) + "h"] - 1) *60) + results[i][1].minute) 
+                            else:
+                                model_tested[results[i][0]] = (((corres_hour[str(stopped_list[ind][0].hour) + "h"] - 1) *60) + stopped_list[ind][0].minute) + (((corres_hour[str(results[i][1].hour) + "h"] - 1) *60) + results[i][1].minute) - (((corres_hour[str(stopped_list[ind][1].hour) + "h"] - 1) *60) + stopped_list[ind][1].minute)
+                                ind += 1
                     else:
-                        if i == len(results)-1:
-                            model_tested[results[i][0]] = (60*len(hours)) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                        if results[i][2] == 'OK':
+                            qual_temp += 1
+                        if ind < len(stopped_list):
+                            if results[i][0] in model_tested.keys():
+                                if i == len(results)-1:
+                                    model_tested[results[i][0]] += (60*len(hours)) - (((corres_hour[str(stopped_list[ind][1].hour) + "h"] - 1) *60) + stopped_list[ind][1].minute) + (((corres_hour[str(stopped_list[ind][0].hour) + "h"] - 1) *60) + stopped_list[ind][0].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                else:
+                                    if results[i][1] < stopped_list[ind][0]:
+                                        model_tested[results[i][0]] += (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                    else:
+                                        model_tested[results[i][0]] += (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(stopped_list[ind][1].hour) + "h"] - 1) *60) + stopped_list[ind][1].minute) + (((corres_hour[str(stopped_list[ind][0].hour) + "h"] - 1) *60) + stopped_list[ind][0].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                        ind += 1
+                            else:
+                                if i == len(results)-1:
+                                    model_tested[results[i][0]] = (60*len(hours)) - ((corres_hour[str(stopped_list[ind][1].hour) + "h"] - 1) *60) + stopped_list[ind][1].minute + ((corres_hour[str(stopped_list[ind][0].hour) + "h"] - 1) *60) + stopped_list[ind][0].minute - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                else:
+                                    if results[i][1] < stopped_list[ind][0]:
+                                        model_tested[results[i][0]] = (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                    else:
+                                        model_tested[results[i][0]] = (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - ((corres_hour[str(stopped_list[ind][1].hour) + "h"] - 1) *60) + stopped_list[ind][1].minute + ((corres_hour[str(stopped_list[ind][0].hour) + "h"] - 1) *60) + stopped_list[ind][0].minute - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                        ind += 1
                         else:
-                            model_tested[results[i][0]] = (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)                            
-            #print(model_tested)
+                            if results[i][0] in model_tested.keys():
+                                if i == len(results)-1:
+                                    model_tested[results[i][0]] += (60*len(hours)) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                else:
+                                    model_tested[results[i][0]] += (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                            else:
+                                if i == len(results)-1:
+                                    model_tested[results[i][0]] = (60*len(hours)) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                                else:
+                                    model_tested[results[i][0]] = (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)    
+                    # print(results[i])
+                    # print(model_tested)
+                    # input("Next")
+            else:
+                for i in range(len(results)):
+                    if i == 0:
+                        if results[i][2] == 'OK':
+                            qual_temp = 1
+                        if i == len(results)-1:
+                            model_tested[results[i][0]] = 60*len(hours)
+                        else:
+                            model_tested[results[i][0]] = ((corres_hour[str(results[i][1].hour) + "h"] - 1) *60) + results[i][1].minute                            
+                    else:
+                        if results[i][2] == 'OK':
+                            qual_temp += 1
+                        if results[i][0] in model_tested.keys():
+                            if i == len(results)-1:
+                                model_tested[results[i][0]] += (60*len(hours)) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                            else:
+                                model_tested[results[i][0]] += (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                        else:
+                            if i == len(results)-1:
+                                model_tested[results[i][0]] = (60*len(hours)) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)
+                            else:
+                                model_tested[results[i][0]] = (((corres_hour[str(results[i][1].hour) + "h"] - 1) * 60) + results[i][1].minute) - (((corres_hour[str(results[i-1][1].hour) + "h"] - 1) * 60) + results[i-1][1].minute)                            
+                # print(str(pos) + "--" + str(model_tested))
             if platform == "stb":
                 for key in model_tested:
                     expect += (model_tested[key]*STB_Expec_Perf[key]*18)/(60*len(hours))
@@ -1170,22 +1358,104 @@ def fullfill_dict_old(platform, result_dict, date_yesterday, date_today):
     return result_dict
 
 def fullfill_unavailability_dict(platform, result_dict, data_fim, data_inicio):
-    # url = "http://192.168.10.200/v1/avaria/all?api_key=uadmin&comentarioFilter=&dataFimFilter=" + data_fim + "+16:00:00&dataInicioFilter=" + data_inicio + "+16:00:00&estadoFilter=&plataformaFilter=&recordsOffset=0&recordsPerPage=1000&slotFilter=&withRelatedRecords=true"
-    # print(url)
-    # headers = {'accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
-    #             }
-    # r = requests.get(url, headers=headers)
-    # dictsf = json.dumps(xmltodict.parse(r.text))
-    # dictsf = json.loads(dictsf)
-    # #print(dictsf)
+    """!Fulfill Dictonary Unavailability Dictionary
+    Initially "Unavailability.db" will be checked to verify if there is any "Damage" previously added. 
+    If a "Damage" was added, system will use the opening date of the damage to check if this "damage" was closed in the current day.
+    If the "damage" was closed the correspondent time will be added to unvailable slot in dict and on "Unavailability.db", "Start-Date" column will be updated to NULL on the respective slot, otherwise all day in that slot will be considered unvailable.
+    Then use URL request to get all "Damages" of opened and closed on day searched.
+    All this "Dameges" will be added to unvailable dictonary.
+    Any Damage opened on searched day and not closed, The opened date will be added to "Unavailability.db" in corresponding slot.
+    @param platform Platform which dictonary will be create for 
+    @param result_dict Dictonary created in function create_unavailability_dict()
+    @param data_fim End Time of day to be searched
+    @param data_inicio Begin Time of day to be searched
+    @see Connect_lite_db()
+    @see create_unavailability_dict()
+    @warning platform parameter must be **"HGW"** or **"STB"**
+    @returns result_dict Returns created dictonary
+    """ 
+    con = Connect_lite_db()
+    con.connect("Unavailability.db")
+    values = con.get_date_not_null(platform.upper())
+    for z in values:
+        beginning_date = z[1].replace(" ","+")
+        #print(beginning_date)
+        url = "http://192.168.10.200/v1/avaria/all?api_key=uadmin&comentarioFilter=&dataFimFilter=" + data_fim + "+16:00:00&dataInicioFilter=" + beginning_date + "&estadoFilter=&plataformaFilter=" + platform.upper() + "&recordsOffset=0&recordsPerPage=1000&slotFilter=&withRelatedRecords=true"
+        headers = {'accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+                    }
+        r = requests.get(url, headers=headers)
+        result = json.dumps(xmltodict.parse(r.text))
+        result = json.loads(result)
+        for i, v in enumerate(result['response']['items']):
+            if result['response']['items'][i]['data_inicio'] == z[1]:
+                if result['response']['items'][i]['data_fim'] == "0000-00-00 00:00:00":
+                    slot = result['response']['items'][i]['sharedProbe']['name']
+                    inicio = data_inicio + " 16:00:00"
+                    fim = data_fim + " 16:00:00"
+                    if platform.lower() == "stb":
+                        stopped_time = inicio + "_" + fim
+                        result_dict["Slot_" + slot].append(stopped_time)
+                    elif platform.lower() == "hgw":
+                        stopped_time = inicio + "_" + fim
+                        result_dict["Slot_" + slot].append(stopped_time)
+                else:
+                    slot = result['response']['items'][i]['sharedProbe']['name']
+                    inicio = data_inicio + " 16:00:00"
+                    fim = result['response']['items'][i]['data_fim']
+                    if platform.lower() == "stb":
+                        stopped_time = inicio + "_" + fim
+                        result_dict["Slot_" + slot].append(stopped_time)
+                    elif platform.lower() == "hgw":
+                        stopped_time = inicio + "_" + fim
+                        result_dict["Slot_" + slot].append(stopped_time)
 
-    # for i, v in enumerate(dictsf['response']['items']):
-    #     print(dictsf['response']['items'][i])
+                    con.update_info(platform.upper(), "Start_Date", "NULL", "Slot", i.replace("_", " "))
+                    con.close()
 
-    lista = ["2020-09-22 07:00:00_2020-09-22 07:14:00", "2020-09-22 07:20:00_2020-09-22 07:25:00"]
+    #print(result_dict)
 
-    result_dict["Slot_11"] = lista
+    url = "http://192.168.10.200/v1/avaria/all?api_key=uadmin&comentarioFilter=&dataFimFilter=" + data_fim + "+16:00:00&dataInicioFilter=" + data_inicio + "+16:00:00&estadoFilter=&plataformaFilter=" + platform.upper() + "&recordsOffset=0&recordsPerPage=1000&slotFilter=&withRelatedRecords=true"
+    #print(url)
+    headers = {'accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+                }
+    r = requests.get(url, headers=headers)
+    dictsf = json.dumps(xmltodict.parse(r.text))
+    dictsf = json.loads(dictsf)
+    #print(dictsf)
+    if "items" in dictsf['response']:
+        for i, v in enumerate(dictsf['response']['items']):
+            # print(dictsf['response']['items'][i])
+            if len(dictsf['response']['items']) != 0:
+                begin_date = dictsf['response']['items'][i]['data_inicio']
+                end_date = dictsf['response']['items'][i]['data_fim']
+                platform = dictsf['response']['items'][i]['ownDetavaria']['plataforma']
+                slot = dictsf['response']['items'][i]['sharedProbe']['name']
+                if "0" in slot:
+                    slot = slot.replace("0", "")
+                if platform.lower() == "stb":
+                    stopped_time = begin_date + "_" + end_date
+                    result_dict["Slot_" + slot].append(stopped_time)
+                elif platform.lower() == "hgw":
+                    stopped_time = begin_date + "_" + end_date
+                    result_dict["Slot_" + slot].append(stopped_time)
 
+        for i, itm in result_dict.items():
+            if len(itm) != 0:
+                #print(itm)
+                for j, k in enumerate(itm):
+                    if "0000-00-00 00:00:00" in k:
+                        damage_beg_date = datetime.strptime(itm[j].split("_")[0], '%Y-%m-%d %H:%M:%S')
+                        data_fim_day = datetime.strptime(data_fim, '%Y-%m-%d').day
+                        data_inicio_day = datetime.strptime(data_inicio, '%Y-%m-%d').day
+                        print(damage_beg_date.day)
+                        print(damage_beg_date.hour) 
+                        if damage_beg_date.day == data_fim_day or (damage_beg_date.day == data_inicio_day and (int(damage_beg_date.hour) >= 16 or damage_beg_date.hour == "0")):
+                            con = Connect_lite_db()
+                            con.connect("Unavailability.db")
+                            con.update_info(platform.upper(), "Start_Date", str(damage_beg_date), "Slot", i.replace("_", " "))
+                            result_dict[i][j] = itm[j].split("_")[0] + "_" + str(data_fim) + " 16:00:00"
+
+    print(result_dict)
     return result_dict
 
 def check_color(value):
@@ -1211,6 +1481,7 @@ def mail_message(values_stb, values_hgw):
     color_disp = check_color(values_stb["Disponibilidade"])
     color_perf = check_color(values_stb["Performance"])
     color_qual = check_color(values_stb["Quality"])
+    values_stb["OEE"] = round((values_stb["Disponibilidade"] * values_stb["Performance"] * values_stb["Quality"])/10000,2)
     color_oee = check_color(values_stb["OEE"])
 
     message = """\
@@ -1247,6 +1518,7 @@ def mail_message(values_stb, values_hgw):
     color_disp = check_color(values_hgw["Disponibilidade"])
     color_perf = check_color(values_hgw["Performance"])
     color_qual = check_color(values_hgw["Quality"])
+    values_hgw["OEE"] = round((values_hgw["Disponibilidade"] * values_hgw["Performance"] * values_hgw["Quality"])/10000,2)
     color_oee = check_color(values_hgw["OEE"])
 
     message = message + """\
@@ -1284,7 +1556,7 @@ def send_mail(mensage):
     @see mail_message()
     @param mensage HTML message to send in body message
     """ 
-    contacts = ['joao.gomes@hfa.pt']
+    contacts = ['jlemos@hfa.pt', 'joao.gomes@hfa.pt']
 
     user = "hfa.notificacoes@hfa.pt"
     pwd = "Janela1;"
@@ -1352,7 +1624,7 @@ def make_graph(x_axis, y_axis, platform, graph_name, pic_name):
     # pic_name = graph_name.replace("/", "_")
     # pic_name = platform + "_" + pic_name
 
-    plt.savefig('C:\\Users\\joao.gomes\\Desktop\\OEE\\Graphs\\' + str(pic_name))
+    plt.savefig('E:\\Work\\JoaoLemos\\Clientes\\TRC\\OEE\\Graphs\\' + str(pic_name))
 
     plt.close()
     #plt.show()
@@ -1541,7 +1813,7 @@ def create_slot_hour_graphs_4graphs(platform, values):
             j += 1
 
         pic_name = platform.upper() + "_" + key.replace("_","")
-        plt.savefig('C:\\Users\\joao.gomes\\Desktop\\OEE\\Graphs\\' + str(pic_name))
+        plt.savefig('E:\\Work\\JoaoLemos\\Clientes\\TRC\\OEE\\Graphs\\' + str(pic_name))
         plt.close()
 
 def create_oee_graph_by_day(platform, values):
@@ -1608,8 +1880,8 @@ def create_graphs_by_day(platform, values):
         hour_disp = round((hour_disp_temp/slots),2)
         hour_perf = round((hour_perf_temp/slots),2)
         hour_qual = round((hour_qual_temp/slots),2)
-        hour_oee = (hour_disp/100)*(hour_perf/100)*(hour_qual/100)
-        hour_oee = round(hour_oee,2)*100
+        hour_oee = ((hour_disp/100)*(hour_perf/100)*(hour_qual/100))*100
+        hour_oee = round(hour_oee,2)
 
         if hour_oee >= 100:
             hour_oee = 100
@@ -1660,13 +1932,15 @@ def values_for_shift(values, shift):
             hour_disp_temp += values[slot][str(hour) + "h"]['Disp']
             hour_perf_temp += values[slot][str(hour) + "h"]['Perf']
             hour_qual_temp += values[slot][str(hour) + "h"]['Qual']
-            hour_oee_temp += values[slot][str(hour) + "h"]['OEE']
+            #hour_oee_temp += values[slot][str(hour) + "h"]['OEE']
             slots += 1
+        
 
         hour_disp = round((hour_disp_temp/slots),2)
         hour_perf = round((hour_perf_temp/slots),2)
         hour_qual = round((hour_qual_temp/slots),2)
-        hour_oee = round((hour_oee_temp/slots),2)
+        hour_oee_temp = ((hour_disp/100) * (hour_perf/100) * (hour_qual/100))/100
+        hour_oee = round(hour_oee_temp,2)
 
         if hour_oee >= 100:
             hour_oee = 100
@@ -1771,7 +2045,7 @@ def create_graphs_slots_day(platform, values):
             oee_value = values[slot]['OEE']
 
         OEE_Slot.append(round(oee_value,1)) 
-        Disp_Slot.append(round(values[slot]["Disp"]))
+        Disp_Slot.append(round(values[slot]["Disp"],1))
         Perf_Slot.append(round(values[slot]["Perf"],1))
         Qual_Slot.append(round(values[slot]["Qual"],1))
     
@@ -1830,7 +2104,7 @@ def create_week_graph(platform, week_day, dict_oee_day, graph_name):
 
     platform = platform.upper()
 
-    graph_name = pic_name.replace(".png","")
+    graph_name_1 = pic_name.replace(".png","")
 
     plt.style.use('classic')
     #Set the size of graph in inches
@@ -1844,7 +2118,7 @@ def create_week_graph(platform, week_day, dict_oee_day, graph_name):
     #Create DOT_Graph with (x, y)
     plt.scatter(x_values, y_values, color='red')
     #Graph title
-    plt.title(graph_name)
+    plt.title(graph_name_1)
     #Graph label x axis
     plt.xlabel('Dias')
     #Graph label y axis
@@ -1859,7 +2133,7 @@ def create_week_graph(platform, week_day, dict_oee_day, graph_name):
         plt.text(i, v+5, str(v), rotation=90, color='blue', ha="center")
 
     # #plt.show()
-    plt.savefig('C:\\Users\\joao.gomes\\Desktop\\OEE\\' + str(pic_name))
+    plt.savefig('E:\\Work\\JoaoLemos\\Clientes\\TRC\\OEE\\' + str(pic_name))
     if week_day == 4:
         f = open(graph_name + ".txt", "w")
         for i in range (5):
@@ -1939,13 +2213,14 @@ def zipdir(path, ziph):
 
 if __name__ == '__main__':
     now = datetime.now()
-    #now = datetime.strptime("2020-09-14", '%Y-%m-%d')
+    # now = datetime.strptime("2020-10-26", '%Y-%m-%d')
     week_day = datetime.today().weekday()
+    # week_day = 0
     if week_day == 0:
-        yesterday = datetime.today() - timedelta(3)
+        yesterday = now - timedelta(3)
     else:
-        yesterday = datetime.today() - timedelta(1)
-    date_today = str(now.year) + "-" + str(now.month) + "-" +str(now.day)
+        yesterday = now - timedelta(1)
+    date_today = str(now.year) + "-" + str(now.month) + "-" + str(now.day)
     date_yesterday = str(yesterday.year) + "-" + str(yesterday.month) + "-" +str(yesterday.day)
 
     for idx,i in enumerate(files):
@@ -1953,6 +2228,7 @@ if __name__ == '__main__':
 
     current_dir = os.getcwd()
     graphs_dir = os.path.join(current_dir, "Graphs")
+
     if not os.path.exists(graphs_dir):
         os.makedirs(graphs_dir)
 
@@ -1966,60 +2242,68 @@ if __name__ == '__main__':
     dictio_stb = create_dictonary("STB")
     dictio_hgw = create_dictonary("HGW")
 
-    un_dict = create_unavailability_dict('stb')
-    #print(un_dict)
-    unvai_slots = fullfill_unavailability_dict('stb', un_dict, '2020-09-17', '2020-09-16')
+    un_dict_stb = create_unavailability_dict('stb')
+    un_dict_hgw = create_unavailability_dict('hgw')
+    print(un_dict_stb)
+    print(un_dict_hgw)
+    #input("Pressiona OK para continuar")
+    unvai_slots_STB = fullfill_unavailability_dict('stb', un_dict_stb, date_today, date_yesterday)
+    unvai_slots_HGW = fullfill_unavailability_dict('hgw', un_dict_hgw, date_today, date_yesterday)
     #print(unvai_slots)
 
-    #Full fill Dictionary for each Slot and hour
-    dictio_full_stb = fullfill_dict("STB", dictio_stb, results_temp_STB, unvai_slots) 
-    #dictio_full_hgw = fullfill_dict("HGW", dictio_hgw, results_temp_HGW, un_dict)
+    dict_stb_csv = create_dictonary_for_csv("STB")
+    dict_hgw_csv = create_dictonary_for_csv("HGW")
 
-    # dict_stb_csv = create_dictonary_for_csv("STB")
-    # dict_hgw_csv = create_dictonary_for_csv("HGW")
-
-    # dict_stb_csv_full = fullfill_dict_for_csv("STB", dict_stb_csv, results_temp_STB)
-    # dict_hgw_csv_full = fullfill_dict_for_csv("HGW", dict_hgw_csv, results_temp_HGW)    
+    #Full fill Dictionary for each Slot and hour and dictonary for create csv
+    dictio_full_stb, dict_stb_csv_full = fullfill_dict("STB", dictio_stb, dict_stb_csv, results_temp_STB, unvai_slots_STB, date_today, date_yesterday) 
+    dictio_full_hgw, dict_hgw_csv_full = fullfill_dict("HGW", dictio_hgw, dict_hgw_csv, results_temp_HGW, unvai_slots_HGW, date_today, date_yesterday)
 
     #Create CSV Data files
-    # create_data_csv_file(dict_stb_csv_full, str(date_today) + "_" + "STB_Data.csv")
-    # create_data_csv_file(dict_hgw_csv_full, str(date_today) + "_" + "HGW_Data.csv")
+    create_data_csv_file(dict_stb_csv_full, str(date_today) + "_" + "STB_Data.csv")
+    create_data_csv_file(dict_hgw_csv_full, str(date_today) + "_" + "HGW_Data.csv")
 
-    # stb_day = create_dictonary_slot_day("STB")
-    # hgw_day = create_dictonary_slot_day("HGW")
+    stb_day = create_dictonary_slot_day("STB")
+    hgw_day = create_dictonary_slot_day("HGW")
 
-    # dict_day_stb = fullfill_dict_slot_day("STB", stb_day, results_temp_STB)
-    # dict_day_hgw = fullfill_dict_slot_day("HGW", hgw_day, results_temp_HGW)
+    print(stb_day)
+    print(hgw_day)
 
-    # create_slot_hour_graphs_4graphs("STB", dictio_full_stb)
-    # create_slot_hour_graphs_4graphs("HGW", dictio_full_hgw)
+    dict_day_stb = fullfill_dict_slot_day("STB", stb_day, results_temp_STB, unvai_slots_STB)
+    dict_day_hgw = fullfill_dict_slot_day("HGW", hgw_day, results_temp_HGW, unvai_slots_HGW)
 
-    # create_graphs_by_day("STB", dictio_full_stb)
-    # create_graphs_by_day("HGW", dictio_full_hgw)
+    # input("Parar Aqui")
 
-    # create_graphs_slots_day("STB", dict_day_stb)
-    # create_graphs_slots_day("HGW", dict_day_hgw)
+    create_slot_hour_graphs_4graphs("STB", dictio_full_stb)
+    create_slot_hour_graphs_4graphs("HGW", dictio_full_hgw)
 
-    # create_numeric_parameters_csv_file(STB_Expec_Perf, HGW_Expec_Perf, morning_shift, aftern_shift)
+    create_graphs_by_day("STB", dictio_full_stb)
+    create_graphs_by_day("HGW", dictio_full_hgw)
 
-    # final_oee_stb = values_for_a_day(dictio_full_stb)
-    # final_oee_hgw = values_for_a_day(dictio_full_hgw)
+    create_graphs_slots_day("STB", dict_day_stb)
+    create_graphs_slots_day("HGW", dict_day_hgw)
 
-    # zipf = zipfile.ZipFile(str(date_today) + "_" + 'graphs.zip', 'w', zipfile.ZIP_DEFLATED)
-    # zipdir('C:\\Users\\joao.gomes\\Desktop\\OEE\\Graphs', zipf)
-    # zipf.close()
-    # final_oee_stb_morning_shift = values_for_shift(dictio_full_stb, "manha")
-    # final_oee_stb_afternoon_shift = values_for_shift(dictio_full_stb, "tarde")
+    create_numeric_parameters_csv_file(STB_Expec_Perf, HGW_Expec_Perf, morning_shift, aftern_shift)
 
-    # create_week_graph("STB", week_day, final_oee_stb,"OEE_Day_STB")
-    # create_week_graph("HGW", week_day, final_oee_hgw,"OEE_Day_HGW")
-    # create_week_graph("STB", week_day, final_oee_stb_morning_shift, "OEE_Morning_Shift_STB")
-    # create_week_graph("STB", week_day, final_oee_stb_afternoon_shift, "OEE_Afternoon_Shift_STB")
-    # create_week_graph("HGW", week_day, final_oee_stb_morning_shift, "OEE_Morning_Shift_HGW")
-    # create_week_graph("HGW", week_day, final_oee_stb_afternoon_shift, "OEE_Afternoon_Shift_HGW")
+    final_oee_stb = values_for_a_day(dictio_full_stb)
+    final_oee_hgw = values_for_a_day(dictio_full_hgw)
 
-    # mens = mail_message(final_oee_stb, final_oee_hgw)
-    # send_mail(mens)
+    zipf = zipfile.ZipFile(str(date_today) + "_" + 'graphs.zip', 'w', zipfile.ZIP_DEFLATED)
+    zipdir('E:\\Work\\JoaoLemos\\Clientes\\TRC\\OEE\\Graphs', zipf)
+    zipf.close()
+    final_oee_stb_morning_shift = values_for_shift(dictio_full_stb, "manha")
+    final_oee_stb_afternoon_shift = values_for_shift(dictio_full_stb, "tarde")
+    final_oee_HGW_morning_shift = values_for_shift(dictio_full_hgw, "manha")
+    final_oee_HGW_afternoon_shift = values_for_shift(dictio_full_hgw, "tarde")
+
+    create_week_graph("STB", week_day, final_oee_stb,"OEE_Day_STB")
+    create_week_graph("HGW", week_day, final_oee_hgw,"OEE_Day_HGW")
+    create_week_graph("STB", week_day, final_oee_stb_morning_shift, "OEE_Morning_Shift_STB")
+    create_week_graph("STB", week_day, final_oee_stb_afternoon_shift, "OEE_Afternoon_Shift_STB")
+    create_week_graph("HGW", week_day, final_oee_HGW_morning_shift, "OEE_Morning_Shift_HGW")
+    create_week_graph("HGW", week_day, final_oee_HGW_afternoon_shift, "OEE_Afternoon_Shift_HGW")
+
+    mens = mail_message(final_oee_stb, final_oee_hgw)
+    send_mail(mens)
 
     ########################Check OEE between to dates#################
     #########################Put this in a funtion#####################
